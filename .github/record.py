@@ -17,14 +17,15 @@ this repository's Dockerfile, as lemonfiber runs it: the caller's uid,
 read-only, no capabilities, the key and the upstream credential owner-only in
 its configuration directory.
 
-This script stands where lemonfiber stands: it mints the service's API key as
-32 lowercase hex characters, hands it to the service through the environment
-variables `plugin.toml`'s `env` names it in, from a file only its owner reads,
-and writes it to the adapter's `upstream.json` beside `lemonfiber.key`. The
-cases asked are every case bound to no media type and every one bound to a
-media type the service files, as `plugin.toml` declares them, and a recording
-left from a case no longer asked is removed. A run whose answers hold the key,
-the API key or a credential the run minted writes nothing.
+This script stands where lemonfiber stands: it mints the service's API key as 32
+lowercase hex characters, hands it to the service through the environment
+variables `plugin.toml`'s `env` names it in, valued in the docker client's own
+environment and never on a command line or on disk, and writes it to the
+adapter's `upstream.json` beside `lemonfiber.key`. The cases asked are every
+case bound to no media type and every one bound to a media type the service
+files, as `plugin.toml` declares them, and a recording left from a case no
+longer asked is removed. A run whose answers hold the key, the API key or a
+credential the run minted writes nothing.
 
     python3 .github/record.py            write conformance/
     python3 .github/record.py --check    record again and compare
@@ -55,6 +56,8 @@ RECORDINGS = ROOT / "conformance"
 CONTRACTS = "https://raw.githubusercontent.com/lemonfiber/lemonfiber/{rev}/contract/capabilities/{capability}/v{major}/conformance.json"
 JSON = "application/json"
 STARTUP_S = 180
+PULLS = 5
+PULL_WAIT_S = 10
 ANSWER_S = 60
 ADAPTER_PORT = 8080
 SEGMENT = re.compile(r"[a-z][a-z0-9_.]*")
@@ -94,6 +97,7 @@ class Answering(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 http.server.ThreadingHTTPServer(("", 80), Answering).serve_forever()
 """
+STAND_INS = (CLIENT_IMAGE,)
 NOTES = {
     "refuses-without-the-key": "Asked without the plugin's key: the kit refuses it before the adapter is reached.",
     "identity-answers": "Who a fresh Sonarr says it is, and the release it runs.",
@@ -126,8 +130,9 @@ NOTES = {
 }
 
 
-def docker(*args: str, check: bool = True, given: str | None = None) -> str:
-    done = subprocess.run(["docker", *args], capture_output=True, text=True, check=False, input=given)
+def docker(*args: str, check: bool = True, given: str | None = None, handed: dict[str, str] | None = None) -> str:
+    done = subprocess.run(["docker", *args], capture_output=True, text=True, check=False, input=given,
+                          env=None if handed is None else os.environ | handed)
     if check and done.returncode != 0:
         raise RuntimeError(f"docker {args[0]}: {done.stderr.strip()}")
     return done.stdout.strip()
@@ -199,6 +204,15 @@ def recording(pinned: str, path: str, status: int, kind: str, body: str, note: s
         "request": {"method": "POST", "path": path, "accept": JSON},
         "response": response,
     }
+
+
+def pulled(image: str) -> None:
+    """`image` in the local store, pulled again while its registry refuses for a moment."""
+    for attempt in range(PULLS):
+        if docker("pull", "-q", image, check=False):
+            return
+        time.sleep(PULL_WAIT_S * (attempt + 1))
+    docker("pull", "-q", image)
 
 
 def owner_only(directory: pathlib.Path) -> None:
@@ -291,10 +305,9 @@ def recorded_live(plugin: str, pinned: str, listens: int, version: int, files: l
         upstream, data, adapter = held / "upstream", held / "data", held / "adapter"
         for directory in (upstream, data / DATA_FOLDER, adapter):
             directory.mkdir(parents=True)
-        handed = held / "upstream.env"
-        handed.write_text("".join(f"{name}={api_key}\n" for name in given), encoding="utf-8")
-        handed.chmod(0o600)
         try:
+            for image in (pinned, *STAND_INS):
+                pulled(image)
             docker("network", "create", "--internal", inside)
             docker("network", "create", outside)
             docker("run", "-d", "--name", f"{name}-client", "--network", inside,
@@ -303,8 +316,9 @@ def recorded_live(plugin: str, pinned: str, listens: int, version: int, files: l
             docker("run", "-d", "--name", f"{name}-upstream", "--network", inside,
                    "--network-alias", plugin, "--add-host", f"{CATALOGUE_HOST}:127.0.0.1",
                    "-e", f"PUID={os.getuid()}", "-e", f"PGID={os.getgid()}",
-                   "-e", "TZ=Etc/UTC", "--env-file", str(handed),
-                   "-v", f"{upstream}:/config", "-v", f"{data}:/data", pinned)
+                   "-e", "TZ=Etc/UTC", *(flag for variable in given for flag in ("-e", variable)),
+                   "-v", f"{upstream}:/config", "-v", f"{data}:/data", pinned,
+                   handed=dict.fromkeys(given, api_key))
             waited("the service did not answer with the key minted for it",
                    lambda: in_service(f"{name}-upstream", listens, version, api_key, "GET",
                                       "/system/status") == "200")
