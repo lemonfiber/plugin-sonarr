@@ -9,8 +9,8 @@ adapter's answer to one case of that contract's `conformance.json` (ARCH-R217),
 asked with the case's own `asked`, its placeholders filled, in the order the
 contract lists them. It is taken against a throwaway Servarr service at the
 digest `plugin.toml` pins for the plugin's own service, on a network with no
-route off the host, so no answer depends on a catalogue, an indexer or a
-download client. The adapter runs from this repository's Dockerfile, as
+route off the host and Sonarr's catalogue answering from nowhere, so no answer
+depends on a catalogue, an indexer or a download client. The adapter runs from this repository's Dockerfile, as
 lemonfiber runs it: the caller's uid, read-only, no capabilities, the key and
 the upstream credential owner-only in its configuration directory.
 
@@ -61,6 +61,7 @@ MINTED = "minted"
 UPSTREAM = "upstream:"
 API_KEY = "api_key"
 DATA_FOLDER = "conformance"
+CATALOGUE_HOST = "skyhook.sonarr.tv"
 SEEDED_CLIENT = {
     "enable": False,
     "protocol": "usenet",
@@ -90,7 +91,7 @@ NOTES = {
     "set_hardlinks-answers": "Importing by hard link set, every other media-management setting kept.",
     "records-answers": "The series a fresh Sonarr holds, for carrying elsewhere: none.",
     "carry-answers": "A carried series whose record is empty: refused before Sonarr is asked.",
-    "lookup-answers": "A term looked up with no route to Sonarr's catalogue: Sonarr's own words for it, carried.",
+    "lookup-answers": "A term looked up with Sonarr's catalogue refusing every connection: Sonarr's own words for it, carried.",
     "add_plan-answers": "Where an add would be filed and to what standard: the first folder and the first profile.",
     "add-answers": "An add with no catalogue identifier into the folder the case names: Sonarr's refusal, carried.",
     "indexer_count-answers": "How many indexers a fresh Sonarr searches: none.",
@@ -257,7 +258,8 @@ def recorded_live(plugin: str, pinned: str, listens: int, version: int) -> tuple
             docker("network", "create", "--internal", inside)
             docker("network", "create", outside)
             docker("run", "-d", "--name", f"{name}-upstream", "--network", inside,
-                   "--network-alias", plugin, "-e", f"PUID={os.getuid()}", "-e", f"PGID={os.getgid()}",
+                   "--network-alias", plugin, "--add-host", f"{CATALOGUE_HOST}:127.0.0.1",
+                   "-e", f"PUID={os.getuid()}", "-e", f"PGID={os.getgid()}",
                    "-e", "TZ=Etc/UTC", "-e", f"{plugin.upper()}__AUTH__APIKEY={api_key}",
                    "-v", f"{upstream}:/config", "-v", f"{data}:/data", pinned)
             waited("the service did not answer with the key minted for it",
