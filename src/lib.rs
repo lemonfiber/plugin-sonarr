@@ -2,5 +2,3 @@
 //! Sonarr through the Servarr client the Servarr adapters share.
 
 pub mod adapter;
-pub mod settings;
-pub mod web;
