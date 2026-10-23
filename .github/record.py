@@ -18,7 +18,8 @@ read-only, no capabilities, the key and the upstream credential owner-only in
 its configuration directory.
 
 This script stands where lemonfiber stands: it mints the service's API key as
-32 lowercase hex characters, hands it to the service through its environment,
+32 lowercase hex characters, hands it to the service through the environment
+variables `plugin.toml`'s `env` names it in, from a file only its owner reads,
 and writes it to the adapter's `upstream.json` beside `lemonfiber.key`. The
 cases asked are every case bound to no media type and every one bound to a
 media type the service files, as `plugin.toml` declares them, and a recording
@@ -64,6 +65,8 @@ MINTED = "minted"
 UPSTREAM = "upstream:"
 API_KEY = "api_key"
 DATA_FOLDER = "conformance"
+MINTED_KEY = "upstream-key"
+API_VERSION = re.compile(r"pub const API_VERSION: u32 = (\d+);")
 CATALOGUE_HOST = "skyhook.sonarr.tv"
 CLIENT_HOST = "conformance-download"
 CLIENT_CATEGORY = "tv"
@@ -130,13 +133,25 @@ def docker(*args: str, check: bool = True, given: str | None = None) -> str:
     return done.stdout.strip()
 
 
-def manifest() -> tuple[str, str, int, int, list[str]]:
-    """The plugin's own service: its id, its pinned image, the port it listens on, its API version and the media types it files."""
+def manifest() -> tuple[str, str, int, int, list[str], list[str]]:
+    """The plugin's own service: its id, its pinned image, the port it listens on, the API
+    version the adapter speaks, the media types it files, and the environment variables its
+    env hands the key lemonfiber mints."""
     read = tomllib.loads((ROOT / "plugin.toml").read_text(encoding="utf-8"))
     plugin = read["plugin"]["id"]
     upstream = next(one for one in read["service"] if one["id"] == plugin)
     return (plugin, f"{upstream['image']}@{upstream['digest']}", upstream["listens"],
-            upstream["api"]["version"], upstream["media_types"])
+            api_version(), upstream["media_types"],
+            [name for name, held in upstream.get("env", {}).items()
+             if isinstance(held, dict) and held.get("secret") == MINTED_KEY])
+
+
+def api_version() -> int:
+    """The version of the service's API the adapter speaks, as `src/adapter.rs` declares it."""
+    declared = API_VERSION.search((ROOT / "src" / "adapter.rs").read_text(encoding="utf-8"))
+    if declared is None:
+        raise RuntimeError("src/adapter.rs declares no API_VERSION")
+    return int(declared.group(1))
 
 
 def core_rev() -> str:
@@ -264,8 +279,8 @@ def pointed(value: object, pointer: str) -> object:
     return value
 
 
-def recorded_live(plugin: str, pinned: str, listens: int, version: int,
-                  files: list[str]) -> tuple[list[str], dict[tuple[str, str], dict]]:
+def recorded_live(plugin: str, pinned: str, listens: int, version: int, files: list[str],
+                  given: list[str]) -> tuple[list[str], dict[tuple[str, str], dict]]:
     """What the adapter speaks, and every case asked of it in front of a throwaway service."""
     name = f"{plugin}-record-{uuid.uuid4().hex[:8]}"
     inside, outside = f"{name}-inside", f"{name}-outside"
@@ -276,6 +291,9 @@ def recorded_live(plugin: str, pinned: str, listens: int, version: int,
         upstream, data, adapter = held / "upstream", held / "data", held / "adapter"
         for directory in (upstream, data / DATA_FOLDER, adapter):
             directory.mkdir(parents=True)
+        handed = held / "upstream.env"
+        handed.write_text("".join(f"{name}={api_key}\n" for name in given), encoding="utf-8")
+        handed.chmod(0o600)
         try:
             docker("network", "create", "--internal", inside)
             docker("network", "create", outside)
@@ -285,7 +303,7 @@ def recorded_live(plugin: str, pinned: str, listens: int, version: int,
             docker("run", "-d", "--name", f"{name}-upstream", "--network", inside,
                    "--network-alias", plugin, "--add-host", f"{CATALOGUE_HOST}:127.0.0.1",
                    "-e", f"PUID={os.getuid()}", "-e", f"PGID={os.getgid()}",
-                   "-e", "TZ=Etc/UTC", "-e", f"{plugin.upper()}__AUTH__APIKEY={api_key}",
+                   "-e", "TZ=Etc/UTC", "--env-file", str(handed),
                    "-v", f"{upstream}:/config", "-v", f"{data}:/data", pinned)
             waited("the service did not answer with the key minted for it",
                    lambda: in_service(f"{name}-upstream", listens, version, api_key, "GET",
@@ -388,8 +406,8 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="record again and compare with conformance/")
     checking = parser.parse_args().check
 
-    plugin, pinned, listens, version, files = manifest()
-    speaks, said = recorded_live(plugin, pinned, listens, version, files)
+    plugin, pinned, listens, version, files, given = manifest()
+    speaks, said = recorded_live(plugin, pinned, listens, version, files, given)
     faults = [fault for spoken in speaks for case in asked_of(spoken, files)
               if (fault := filed(said, spoken, case["case"], checking)) is not None]
     faults += [fault for spoken in speaks if (fault := left(said, spoken, checking)) is not None]
