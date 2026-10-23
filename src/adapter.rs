@@ -3,12 +3,15 @@
 use std::sync::Arc;
 
 use adapter_kit_servarr::client::Servarr;
-use adapter_kit_servarr::credential::Holding;
 use adapter_kit_servarr::curator::{Curator, Files, NoMusic};
+use lemonfiber_adapter_kit::credential::Holding;
 use lemonfiber_adapter_kit::{Kit, Readiness};
 use lemonfiber_contract::adapter::{About, Release};
 use lemonfiber_contract::capabilities::library;
 use lemonfiber_ports::http::Http;
+
+/// Where Sonarr answers, by its service id and the port it listens on.
+pub const ADDRESS: &str = "http://sonarr:8989";
 
 /// The upstream this adapter fronts, as its project names itself.
 pub const UPSTREAM: &str = "Sonarr";
