@@ -54,6 +54,7 @@ id     = "upstream-key"
 of     = "sonarr"
 minted = true
 why    = "The key Sonarr answers its API to, which the adapter in front of it presents"
+carried_from = { file = "/config/config.xml", format = "xml", key = "Config.ApiKey" }
 
 [[proof]]
 id      = "sonarr.answers"
