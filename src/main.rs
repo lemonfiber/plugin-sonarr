@@ -42,7 +42,7 @@ async fn serve(settings: &Settings) -> Result<(), String> {
         .map_err(|why| format!("{} could not be listened on: {why}", settings.listen))?;
     eprintln!("sonarr-adapter: answering on {}", settings.listen);
     lemonfiber_adapter_kit::serving(
-        sonarr_adapter::adapter::kit(key, Arc::new(sonarr)),
+        sonarr_adapter::adapter::kit(key, &settings.configuration, Arc::new(sonarr)),
         listener,
         stopped(),
     )
