@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "adapter-kit-servarr"
 version = "0.18.0"
-source = "git+https://github.com/lemonfiber/adapter-kit-servarr?rev=c95a7d059841c0e5d47b83a91912a7cdf4f4c2b3#c95a7d059841c0e5d47b83a91912a7cdf4f4c2b3"
+source = "git+https://github.com/lemonfiber/adapter-kit-servarr?rev=25894f7d0e266f7c9e54c677b4906eb48b5d59f0#25894f7d0e266f7c9e54c677b4906eb48b5d59f0"
 dependencies = [
  "async-trait",
  "jiff",
