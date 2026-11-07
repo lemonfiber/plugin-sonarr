@@ -1,8 +1,10 @@
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
 
 use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
-use lemonfiber_contract::adapter::{about_path, ready_path, About};
+use lemonfiber_contract::adapter::{about_path, ready_path, About, REQUEST_KEY_FILE};
+use lemonfiber_contract::capabilities::library;
 use lemonfiber_fixtures::http::{Answer, Fake};
 use tower::ServiceExt as _;
 
@@ -12,6 +14,26 @@ use super::{about, kit, sonarr, DIGEST, RELEASE, UPSTREAM};
 
 fn a_key() -> String {
     ('e'..='t').collect()
+}
+
+fn the_gate_s_key() -> String {
+    ('G'..='W').collect()
+}
+
+fn configuration() -> &'static Path {
+    static WRITTEN: OnceLock<PathBuf> = OnceLock::new();
+    WRITTEN.get_or_init(|| {
+        let directory =
+            std::env::temp_dir().join(format!("sonarr-adapter-tests-{}", std::process::id()));
+        let written = std::fs::create_dir_all(&directory).and_then(|()| {
+            std::fs::write(
+                directory.join(REQUEST_KEY_FILE),
+                format!("{}\n", the_gate_s_key()),
+            )
+        });
+        assert!(written.is_ok(), "{written:?}");
+        directory
+    })
 }
 
 const BASE: &str = "http://sonarr:8989";
@@ -38,7 +60,10 @@ async fn answered_by(
     let Ok(request) = request.body(Body::from(body.to_owned())) else {
         return (StatusCode::IM_A_TEAPOT, Vec::new());
     };
-    let Ok(response) = kit(a_key(), curator(fake)).router().oneshot(request).await;
+    let Ok(response) = kit(a_key(), configuration(), curator(fake))
+        .router()
+        .oneshot(request)
+        .await;
     let status = response.status();
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
@@ -169,5 +194,69 @@ async fn it_is_ready_while_sonarr_answers_its_ping() {
             (status, body.as_slice()),
             (StatusCode::OK, b"false".as_slice())
         );
+    }
+}
+
+fn refused_as(body: &[u8]) -> Option<serde_json::Value> {
+    serde_json::from_slice::<serde_json::Value>(body)
+        .ok()
+        .and_then(|refusal| refusal.get("type").cloned())
+}
+
+#[tokio::test]
+async fn the_request_gate_s_key_opens_each_operation_it_may_ask() {
+    let gate = the_gate_s_key();
+    let fake = Fake::always(Answer::reply(200, "[]"));
+    let (status, body) = answered_by(
+        &fake,
+        "POST",
+        "/lemonfiber/library.curate/v1/titles",
+        Some(&gate),
+        r#"{"kind":"tv"}"#,
+    )
+    .await;
+    assert_eq!(
+        (status, body.as_slice()),
+        (StatusCode::OK, b"[]".as_slice())
+    );
+    assert!(fake
+        .requests()
+        .iter()
+        .all(|asked| asked.url == format!("{BASE}/api/v3/series")));
+    for operation in library::REQUESTED {
+        let (status, body) = answered(
+            "POST",
+            &format!("/lemonfiber/library.curate/v1/{operation}"),
+            Some(&gate),
+            "{}",
+        )
+        .await;
+        assert_ne!(status, StatusCode::UNAUTHORIZED, "{operation}");
+        assert_ne!(
+            refused_as(&body),
+            Some(serde_json::json!("disallowed")),
+            "{operation}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn the_request_gate_s_key_is_disallowed_everything_else() {
+    let gate = the_gate_s_key();
+    for (method, path) in [
+        ("POST", "/lemonfiber/library.curate/v1/identity".to_owned()),
+        ("POST", "/lemonfiber/library.curate/v1/carry".to_owned()),
+        ("GET", about_path()),
+        ("GET", ready_path()),
+    ] {
+        let fake = Fake::always(Answer::reply(200, "{}"));
+        let (status, body) = answered_by(&fake, method, &path, Some(&gate), "{}").await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{path}");
+        assert_eq!(
+            refused_as(&body),
+            Some(serde_json::json!("disallowed")),
+            "{path}"
+        );
+        assert!(fake.requests().is_empty(), "{path}");
     }
 }
