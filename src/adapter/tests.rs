@@ -260,3 +260,39 @@ async fn the_request_gate_s_key_is_disallowed_everything_else() {
         assert!(fake.requests().is_empty(), "{path}");
     }
 }
+
+#[tokio::test]
+async fn the_request_gate_s_key_opens_neither_unqueue_nor_grab() {
+    let gate = the_gate_s_key();
+    for (operation, body) in [
+        ("unqueue", r#"{"kind":"tv","id":51,"blocklist":true}"#),
+        ("grab", r#"{"kind":"tv","id":4,"release":"0000"}"#),
+    ] {
+        let fake = Fake::always(Answer::reply(200, "{}"));
+        let (status, said) = answered_by(
+            &fake,
+            "POST",
+            &format!("/lemonfiber/library.curate/v1/{operation}"),
+            Some(&gate),
+            body,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{operation}");
+        assert_eq!(
+            refused_as(&said),
+            Some(serde_json::json!("disallowed")),
+            "{operation}"
+        );
+        assert!(fake.requests().is_empty(), "{operation}");
+        let (status, _) = answered_by(
+            &fake,
+            "POST",
+            &format!("/lemonfiber/library.curate/v1/{operation}"),
+            Some(&a_key()),
+            body,
+        )
+        .await;
+        assert_ne!(status, StatusCode::BAD_REQUEST, "{operation}");
+        assert!(!fake.requests().is_empty(), "{operation}");
+    }
+}
