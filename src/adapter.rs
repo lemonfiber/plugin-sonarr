@@ -20,8 +20,7 @@ pub const UPSTREAM: &str = "Sonarr";
 /// The Sonarr release this adapter's recordings were taken from.
 pub const RELEASE: &str = "4.0.20.3014-ls327";
 
-/// The digest of the image that release's recordings were taken from.
-pub const DIGEST: &str = "sha256:dffc730adcb8b4f4342792fbb27fcad9c62fb8660523f2aeb082416980d7fe0c";
+include!(concat!(env!("OUT_DIR"), "/fronted.rs"));
 
 /// What every failure is blamed on.
 pub const SERVICE: &str = "sonarr";
