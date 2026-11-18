@@ -17,9 +17,6 @@ pub const ADDRESS: &str = "http://sonarr:8989";
 /// The upstream this adapter fronts, as its project names itself.
 pub const UPSTREAM: &str = "Sonarr";
 
-/// The Sonarr release this adapter's recordings were taken from.
-pub const RELEASE: &str = "4.0.20.3014-ls327";
-
 include!(concat!(env!("OUT_DIR"), "/fronted.rs"));
 
 /// What every failure is blamed on.
