@@ -41,10 +41,10 @@ digest      = "sha256:8550b4bbb85578467d4b7ffa0a5d1c98cbb0959a6431694dd8df4fa08d
 tag         = "main-e02fb26b1b66"
 criticality = "core"
 reaches     = ""
-asks_for    = "Nothing beyond this machine. It answers lemonfiber's library.curate contract by calling Sonarr, beside it, with the key lemonfiber minted for it."
+asks_for    = "Nothing beyond this machine. It answers lemonfiber's indexer.pull and library.curate contracts by calling Sonarr, beside it, with the key lemonfiber minted for it."
 config_path = "/config"
 listens     = 8080
-speaks      = ["library.curate@1"]
+speaks      = ["indexer.pull@1", "library.curate@1"]
 fronts      = "sonarr"
 provides    = ["library.curate"]
 upstream    = { api_key = { secret = "upstream-key" } }
@@ -94,3 +94,8 @@ native     = ["qbittorrent", "transmission"]
 [[ask]]
 service    = "sonarr"
 capability = "dashboard.show"
+
+[[ask]]
+service    = "sonarr"
+capability = "indexer.search"
+native     = ["servarr", "nzbhydra2"]

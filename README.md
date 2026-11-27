@@ -11,13 +11,16 @@ The default bundle in
 repository by a revision and the digests of its manifest and its tree, and
 lemonfiber compiles that tree in.
 lemonfiber reaches Sonarr through the adapter this repository holds, which
-speaks lemonfiber's `library.curate` contract in front of it: a Rust crate built
+speaks lemonfiber's `indexer.pull` and `library.curate` contracts in front of it: a
+Rust crate built
 on the core's adapter kit and on
 [adapter-kit-servarr](https://github.com/lemonfiber/adapter-kit-servarr), into the
 image `ghcr.io/lemonfiber/sonarr-adapter`, published from every commit on `main`
 and from each tag the release train cuts. lemonfiber mints the key
 Sonarr answers its API to, hands it to Sonarr as `SONARR__AUTH__APIKEY` and to the
-adapter in its `upstream.json`, and to nothing else.
+adapter in its `upstream.json`, and to nothing else. Told about an NZBHydra2 over
+`indexer.pull`, the adapter adds it to Sonarr as a Newznab indexer with the key
+lemonfiber minted for NZBHydra2.
 
 ## What is here
 
@@ -26,6 +29,7 @@ adapter in its `upstream.json`, and to nothing else.
 | `plugin.toml` | The part's manifest |
 | `recordings/sonarr/` | The responses its proofs are held to |
 | `src/` | The adapter |
+| `conformance/indexer.pull@1/` | The adapter's answer to each conformance case, in front of the pinned Sonarr |
 | `conformance/library.curate@1/` | The adapter's answer to each conformance case, in front of the pinned Sonarr |
 | `Dockerfile` | The adapter's image |
 | `targets.toml` | The lemonfiber its checks run against, and the core the adapter is built on |
