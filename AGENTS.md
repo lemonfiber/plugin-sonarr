@@ -10,15 +10,15 @@
 ## What this repo is
 
 Sonarr as a first-party lemonfiber plugin: `plugin.toml` and the adapter
-that speaks the `library.curate@1` contract in front of Sonarr. The adapter is the
-Rust crate at the root, built on `lemonfiber-adapter-kit` from the core and on
+that speaks the `indexer.pull@1` and `library.curate@1` contracts in front of
+Sonarr. The adapter is the Rust crate at the root, built on `lemonfiber-adapter-kit` from the core and on
 `adapter-kit-servarr`, the Servarr client the Servarr adapters share, each at the
 commit `Cargo.toml` pins, into the image the `Dockerfile` builds. `release.yml`
 publishes that image from every commit on `main` and from the train's tag. The
 [bundle contract](https://github.com/lemonfiber/spec/blob/main/20-architecture/contracts/bundle.md)
 says how the catalogue pins this repository and how lemonfiber carries it.
 
-`conformance/` holds one recording per case of the contract the adapter speaks.
+`conformance/` holds one recording per case of each contract the adapter speaks.
 `lemonfiber plugin record .`, at the commit `targets.toml` names, writes them
 against a throwaway Sonarr at the digest `plugin.toml` pins and the adapter
 it pins; CI takes every recording again with the adapter built from this tree.
